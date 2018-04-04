@@ -104,6 +104,8 @@ pub fn get_debug_loc(debug_sections: &DebugSections) -> DebugLocInfo {
         }
     }
 
+    locations.sort_by(|a, b| a.address.cmp(&b.address));
+
     DebugLocInfo {
         sources,
         locations,

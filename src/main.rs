@@ -3,7 +3,7 @@ use std::io::prelude::*;
 
 use wasm_read::DebugSections;
 use reloc::reloc;
-use dwarf::print_debug_loc;
+use dwarf::get_debug_loc;
 
 extern crate gimli;
 extern crate wasmparser;
@@ -25,5 +25,11 @@ fn main() {
       reloc(&mut debug_sections);
     }
 
-    print_debug_loc(&debug_sections);
+    let di = get_debug_loc(&debug_sections);
+    for (id, path) in di.sources.iter().enumerate() {
+      println!("source {}: {}", id, path);
+    }
+    for loc in di.locations {
+      println!("{:x} @ {},{} ({})", loc.address, loc.line, loc.column, loc.source_id);
+    }
 }

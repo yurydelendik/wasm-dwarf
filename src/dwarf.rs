@@ -1,5 +1,7 @@
 // Parses DWARF information.
 
+use std::collections::HashMap;
+
 use gimli;
 
 use gimli::{
@@ -22,12 +24,29 @@ fn to_vec(b: &[u8]) -> Vec<u8> {
     result
 }
 
-pub fn print_debug_loc(debug_sections: &DebugSections) {
+pub struct DebugLoc {
+    pub address: u64,
+    pub source_id: u32,
+    pub line: u32,
+    pub column: u32,
+}
+
+pub struct DebugLocInfo {
+    pub sources: Vec<String>,
+    pub locations: Vec<DebugLoc>,
+}
+
+pub fn get_debug_loc(debug_sections: &DebugSections) -> DebugLocInfo {
+    let mut sources = Vec::new();
+    let mut locations = Vec::new();
+    let mut source_to_id_map: HashMap<u64, usize> = HashMap::new();
+
     let ref tables = debug_sections.tables;
     let ref debug_str = DebugStr::new(&tables[&to_vec(b".debug_str")], LittleEndian);
     let ref debug_abbrev = DebugAbbrev::new(&tables[&to_vec(b".debug_abbrev")], LittleEndian);
     let ref debug_info = DebugInfo::new(&tables[&to_vec(b".debug_info")], LittleEndian);
     let ref debug_line = DebugLine::new(&tables[&to_vec(b".debug_line")], LittleEndian);
+
     let mut iter = debug_info.units();
     while let Some(unit) = iter.next().unwrap_or(None) {
         let abbrevs = unit.abbreviations(debug_abbrev).unwrap();
@@ -45,7 +64,6 @@ pub fn print_debug_loc(debug_sections: &DebugSections) {
         let program = debug_line.program(offset, unit.address_size(), comp_dir, comp_name);
         if let Ok(program) = program {
             let mut rows = program.rows();
-            let mut file_index = 0;
             while let Some((header, row)) = rows.next_row().unwrap() {
                 let pc = debug_sections.code_content as u64 + row.address();
                 let line = row.line().unwrap_or(0);
@@ -53,22 +71,41 @@ pub fn print_debug_loc(debug_sections: &DebugSections) {
                     gimli::ColumnType::Column(column) => column,
                     gimli::ColumnType::LeftEdge => 0,
                 };
-                if file_index != row.file_index() {
-                    file_index = row.file_index();
-                    if let Some(file) = row.file(header) {
+                let file_index = row.file_index();
+                let source_id = if !source_to_id_map.contains_key(&file_index) {
+                    let file_path: String = if let Some(file) = row.file(header) {
                         if let Some(directory) = file.directory(header) {
-                            println!(
-                                "uri: \"{}/{}\"",
+                            format!(
+                                "{}/{}",
                                 directory.to_string_lossy(),
                                 file.path_name().to_string_lossy()
-                            );
+                            )
                         } else {
-                            println!("uri: \"{}\"", file.path_name().to_string_lossy());
+                            String::from(file.path_name().to_string_lossy())
                         }
-                    }
-                }
-                println!("{:x} @ {},{}", pc, line, column);
+                    } else {
+                        String::from("<unknown>")
+                    };
+                    let index = sources.len();
+                    sources.push(file_path);
+                    source_to_id_map.insert(file_index, index);
+                    index
+                } else {
+                    *source_to_id_map.get(&file_index).unwrap() as usize
+                };
+                let loc = DebugLoc {
+                    address: pc,
+                    source_id: source_id as u32,
+                    line: line as u32,
+                    column: column as u32,
+                };
+                locations.push(loc);
             }
         }
+    }
+
+    DebugLocInfo {
+        sources,
+        locations,
     }
 }

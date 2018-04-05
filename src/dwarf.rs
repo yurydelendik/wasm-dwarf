@@ -48,7 +48,7 @@ pub fn get_debug_loc(debug_sections: &DebugSections) -> DebugLocInfo {
     let ref debug_line = DebugLine::new(&tables[&to_vec(b".debug_line")], LittleEndian);
 
     let mut iter = debug_info.units();
-    while let Some(unit) = iter.next().unwrap_or(None) {
+    while let Some(unit) = iter.next().unwrap_or(None) {        
         let abbrevs = unit.abbreviations(debug_abbrev).unwrap();
         let mut cursor = unit.entries(&abbrevs);
         cursor.next_dfs().expect("???");
@@ -102,6 +102,9 @@ pub fn get_debug_loc(debug_sections: &DebugSections) -> DebugLocInfo {
                 locations.push(loc);
             }
         }
+
+        // new unit, new sources
+        source_to_id_map.clear();
     }
 
     locations.sort_by(|a, b| a.address.cmp(&b.address));

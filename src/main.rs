@@ -18,7 +18,7 @@ mod to_json;
 
 fn main() {
     let perform_reloc = !true;
-    let filename = "test/hi.2.wasm";
+    let filename = "test/hi.3.wasm";
     let mut f = File::open(filename).expect("file not found");
     let mut data = Vec::new();
     f.read_to_end(&mut data).expect("unable to read file");
@@ -29,7 +29,7 @@ fn main() {
       reloc(&mut debug_sections);
     }
 
-    let as_json = true;
+    let as_json = !true;
     let di = get_debug_loc(&debug_sections);
     if as_json {
       println!("{}", convert_debug_info_to_json(&di).to_string());

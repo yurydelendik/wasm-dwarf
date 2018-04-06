@@ -99,7 +99,7 @@ pub fn reloc(debug_sections: &mut DebugSections) {
                 9 => 0, // section offset,
                 _ => panic!("unexpected reloc type")
             };
-            println!("{} {}", index, target_offset);
+            // println!("{} {}", index, target_offset);
             let target_addend = reader.read_var_u32().unwrap();
 
             let offset = target_offset + target_addend;

@@ -46,6 +46,9 @@ fn main() {
     let mut debug_sections = DebugSections::read_sections(data.as_slice());
 
     if perform_reloc {
+      if debug_sections.linking.is_none() {
+        panic!("relocation information was not found");
+      }
       reloc(&mut debug_sections);
     }
 

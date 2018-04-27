@@ -21,6 +21,7 @@ fn is_linking_section_name(name: &[u8]) -> bool {
 
 pub struct DebugSections {
     pub tables: HashMap<Vec<u8>, Vec<u8>>,
+    pub tables_index: HashMap<usize, Vec<u8>>,
     pub reloc_tables: HashMap<Vec<u8>, Vec<u8>>,
     pub linking: Option<Vec<u8>>,
     pub code_content: usize,
@@ -34,9 +35,11 @@ impl DebugSections {
         let mut current_section_name = None;
         let mut linking: Option<Vec<u8>> = None;
         let mut tables = HashMap::new();
+        let mut tables_index = HashMap::new();
         let mut reloc_tables = HashMap::new();
         let mut code_content: Option<usize> = None;
         let mut func_offsets = Vec::new();
+        let mut section_index = 0;
 
         loop {
             let offset = parser.current_position();
@@ -66,6 +69,11 @@ impl DebugSections {
                 ParserState::SectionRawData(ref data) => {
                     let mut data_copy = Vec::new();
                     data_copy.extend_from_slice(data);
+
+                    let mut name_copy = Vec::new();
+                    name_copy.extend_from_slice(current_section_name.as_ref().unwrap());
+                    tables_index.insert(section_index, name_copy);
+
                     let section_name = current_section_name.take().unwrap();
                     if is_debug_section_name(&section_name) {          
                         tables.insert(
@@ -81,6 +89,7 @@ impl DebugSections {
                         assert!(is_linking_section_name(&section_name));
                         linking = Some(data_copy);
                     }
+
                     input = ParserInput::Default;
                 },
                 ParserState::BeginSection { code: SectionCode::Import, .. } |
@@ -100,6 +109,10 @@ impl DebugSections {
                 ParserState::BeginSection { .. } => {
                     input = ParserInput::SkipSection;
                 },
+                ParserState::EndSection => {
+                    section_index += 1;
+                    input = ParserInput::Default;
+                },
                 _ => {
                     input = ParserInput::Default;
                 },
@@ -107,6 +120,7 @@ impl DebugSections {
         }        
         DebugSections {
             tables,
+            tables_index,
             reloc_tables,
             linking,
             code_content: code_content.unwrap(),

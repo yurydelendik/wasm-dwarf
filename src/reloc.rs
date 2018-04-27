@@ -16,7 +16,7 @@ pub fn reloc(debug_sections: &mut DebugSections) {
     let (func_indices, _symbols) = {
         let ref linking_table = debug_sections.linking.as_ref().unwrap();
         let mut reader = BinaryReader::new(&linking_table);
-        let mut symbols: HashMap<u32, Vec<u8>> = HashMap::new();
+        let mut symbols: HashMap<u32, u32> = HashMap::new();
         let mut func_indices: HashMap<u32, u32> = HashMap::new();
         while !reader.eof() {
             let table_code = reader.read_var_u32().unwrap();
@@ -52,13 +52,8 @@ pub fn reloc(debug_sections: &mut DebugSections) {
                             }
                         }
                         0x3 /* WASM_SYMBOL_TYPE_SECTION */ => {
-                            let code = table_reader.read_var_u32().unwrap();
-                            if code == 0 {
-                                let section_name = table_reader.read_string().unwrap();
-                                let mut section_name_copy = Vec::new();
-                                section_name_copy.extend_from_slice(section_name);                
-                                symbols.insert(index as u32, section_name_copy);
-                            }
+                            let section_index = table_reader.read_var_u32().unwrap();
+                            symbols.insert(index as u32, section_index);
                         }
                         _ => panic!("unknown symbol kind")
                     }
@@ -80,8 +75,7 @@ pub fn reloc(debug_sections: &mut DebugSections) {
         let reloc_table = debug_sections.reloc_tables[reloc_table_name].clone();
         let fixup_section_name = &reloc_table_name[6..];
         let mut reader = BinaryReader::new(&reloc_table);
-        reader.read_var_u32().unwrap();
-        reader.read_string().unwrap();
+        reader.read_var_u32().unwrap(); // section_index
         let count = reader.read_var_u32().unwrap();
         for _ in 0..count {
             let ty = reader.read_var_u32().unwrap();

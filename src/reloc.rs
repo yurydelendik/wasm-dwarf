@@ -1,5 +1,4 @@
 // Applies reloction entries to the existing sections.
-
 use std::collections::HashMap;
 
 use wasmparser::BinaryReader;
@@ -12,11 +11,18 @@ fn to_vec(b: &[u8]) -> Vec<u8> {
     result
 }
 
+enum SymbolKind {
+    Section (u32),
+    Data (u32, u32),
+}
+
 pub fn reloc(debug_sections: &mut DebugSections) {
-    let (func_indices, _symbols) = {
+    let (func_indices, symbols) = {
         let ref linking_table = debug_sections.linking.as_ref().unwrap();
         let mut reader = BinaryReader::new(&linking_table);
-        let mut symbols: HashMap<u32, u32> = HashMap::new();
+        let version = reader.read_var_u32().unwrap();
+        assert!(version == 1);
+        let mut symbols: HashMap<u32, SymbolKind> = HashMap::new();
         let mut func_indices: HashMap<u32, u32> = HashMap::new();
         while !reader.eof() {
             let table_code = reader.read_var_u32().unwrap();
@@ -46,14 +52,16 @@ pub fn reloc(debug_sections: &mut DebugSections) {
                         0x1 /* WASM_SYMBOL_TYPE_DATA */ => {
                             table_reader.read_string().unwrap();
                             if (symbol_flags & wasm_symbol_undefined_flag) == 0 {
+                                let data_segment = table_reader.read_var_u32().unwrap();
+                                let offset = table_reader.read_var_u32().unwrap();
                                 table_reader.read_var_u32().unwrap();
-                                table_reader.read_var_u32().unwrap();
-                                table_reader.read_var_u32().unwrap();
+
+                                symbols.insert(index as u32, SymbolKind::Data(data_segment, offset));
                             }
                         }
                         0x3 /* WASM_SYMBOL_TYPE_SECTION */ => {
                             let section_index = table_reader.read_var_u32().unwrap();
-                            symbols.insert(index as u32, section_index);
+                            symbols.insert(index as u32, SymbolKind::Section(section_index));
                         }
                         _ => panic!("unknown symbol kind")
                     }
@@ -75,7 +83,7 @@ pub fn reloc(debug_sections: &mut DebugSections) {
         let reloc_table = debug_sections.reloc_tables[reloc_table_name].clone();
         let fixup_section_name = &reloc_table_name[6..];
         let mut reader = BinaryReader::new(&reloc_table);
-        reader.read_var_u32().unwrap(); // section_index
+        reader.read_var_u32().unwrap(); // TODO use section_index
         let count = reader.read_var_u32().unwrap();
         for _ in 0..count {
             let ty = reader.read_var_u32().unwrap();
@@ -85,7 +93,13 @@ pub fn reloc(debug_sections: &mut DebugSections) {
 
             let index = reader.read_var_u32().unwrap();
             let target_offset = match ty {
-                5 => index,
+                5 => {
+                    if let SymbolKind::Data(segment, offset) = symbols[&index] {
+                        debug_sections.data_segment_offsets[segment as usize] + offset
+                    } else {
+                        panic!("unexpected symbol type");
+                    }
+                }
                 8 => {
                     let func_index = func_indices.get(&index).unwrap();
                     debug_sections.func_offsets[*func_index as usize] as u32 // function offset
@@ -93,8 +107,13 @@ pub fn reloc(debug_sections: &mut DebugSections) {
                 9 => 0, // section offset,
                 _ => panic!("unexpected reloc type")
             };
-            // println!("{} {}", index, target_offset);
+
             let target_addend = reader.read_var_u32().unwrap();
+
+            let _old_offset = (table[fixup_offset + 0] as u32) |
+              ((table[fixup_offset + 1] as u32) << 8) |
+              ((table[fixup_offset + 2] as u32) << 16) |
+              ((table[fixup_offset + 3] as u32) << 24);
 
             let offset = target_offset + target_addend;
             table[fixup_offset + 0] = (offset & 0xFF) as u8;
@@ -102,10 +121,9 @@ pub fn reloc(debug_sections: &mut DebugSections) {
             table[fixup_offset + 2] = ((offset >> 16) & 0xFF) as u8;
             table[fixup_offset + 3] = ((offset >> 24) & 0xFF) as u8;
 
-            // let fixup = &mut table[fixup_offset..fixup_offset + 4];
-            // println!("{} {}->{:?} {}+{}",
-            //  str::from_utf8(fixup_section_name).unwrap(), fixup_offset,
-            //  fixup, target_offset, target_addend);
+            // println!("{:x}: {:x} -> {:x} ({} {} t{})",
+            //   fixup_offset, _old_offset, offset,
+            //   str::from_utf8(fixup_section_name).unwrap(), index, ty);
         }
     }
 }

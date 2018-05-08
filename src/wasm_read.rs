@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use wasmparser::{
     Parser,WasmDecoder,ParserState,ParserInput,SectionCode,
-    ImportSectionEntryType
+    ImportSectionEntryType,Operator
 };
 
 fn is_reloc_debug_section_name(name: &[u8]) -> bool {
@@ -26,6 +26,7 @@ pub struct DebugSections {
     pub linking: Option<Vec<u8>>,
     pub code_content: usize,
     pub func_offsets: Vec<usize>,
+    pub data_segment_offsets: Vec<u32>,
 }
 
 impl DebugSections {
@@ -39,6 +40,7 @@ impl DebugSections {
         let mut reloc_tables = HashMap::new();
         let mut code_content: Option<usize> = None;
         let mut func_offsets = Vec::new();
+        let mut data_segment_offsets = Vec::new();
         let mut section_index = 0;
 
         loop {
@@ -93,6 +95,7 @@ impl DebugSections {
                     input = ParserInput::Default;
                 },
                 ParserState::BeginSection { code: SectionCode::Import, .. } |
+                ParserState::BeginSection { code: SectionCode::Data, .. } |
                 ParserState::BeginSection { code: SectionCode::Code, .. } => {
                     input = ParserInput::Default;
                 },
@@ -113,6 +116,14 @@ impl DebugSections {
                     section_index += 1;
                     input = ParserInput::Default;
                 },
+                ParserState::InitExpressionOperator(ref op) => {
+                    if let Operator::I32Const { value, } = op {
+                        data_segment_offsets.push(*value as u32);
+                    } else {
+                        panic!("Unexpected init expression operator");
+                    }
+                    input = ParserInput::Default;
+                },
                 _ => {
                     input = ParserInput::Default;
                 },
@@ -125,6 +136,7 @@ impl DebugSections {
             linking,
             code_content: code_content.unwrap(),
             func_offsets,
+            data_segment_offsets,
         }
     }
 }

@@ -19,11 +19,53 @@ mod reloc;
 mod dwarf;
 mod to_json;
 
+struct PrefixReplacements {
+  replacements: Vec<(String, String)>,
+}
+
+impl PrefixReplacements {
+  fn parse(input: &Vec<String>) -> PrefixReplacements {
+    let mut replacements = Vec::new();
+    for i in input.iter() {
+      let separator = i.find('=');
+      if let Some(separator_index) = separator {
+        replacements.push((
+          i.chars().take(separator_index).collect(),
+          i.chars().skip(separator_index + 1).take(i.len() - 1 - separator_index).collect()
+        ));
+      } else {
+        replacements.push((i.clone(), String::new()))
+      }
+    }
+    return PrefixReplacements { replacements, };
+  }
+
+  fn replace(&self, path: &String) -> String {
+    let mut result = path.clone();
+    for (ref old_prefix, ref new_prefix) in self.replacements.iter() {
+      if path.starts_with(old_prefix) {
+        result = result.split_off(old_prefix.len());
+        result.insert_str(0, new_prefix);
+        return result;
+      }
+    }
+    result
+  }
+
+  fn replace_all(&self, paths: &mut Vec<String>) {
+    for path in paths.iter_mut() {
+      *path = self.replace(&path);
+    }
+  }
+}
+
 fn main() {
     let mut opts = Options::new();
     opts.optopt("o", "", "set output file name", "NAME");
     opts.optflag("", "relocation", "perform relocation first");
     opts.optflag("d", "dump", "print source files and location entries");
+    opts.optmulti("p", "prefix", "replace source filename prefix", "OLD_PREFIX[=NEW_PREFIX]");
+    opts.optflag("s", "sources", "read and embed source files");
     opts.optflag("h", "help", "print this help menu");
 
     let args: Vec<_> = env::args().collect();
@@ -53,7 +95,24 @@ fn main() {
     }
 
     let as_json = matches.opt_present("o");
-    let di = get_debug_loc(&debug_sections);
+    let mut di = get_debug_loc(&debug_sections);
+
+    if matches.opt_present("sources") {
+      let mut sources = Vec::new();
+      for file in di.sources.iter() {
+        let mut f = File::open(file).expect("file not found");
+        let mut data = Vec::new();
+        f.read_to_end(&mut data).expect("unable to read file");
+        sources.push(String::from_utf8(data).unwrap());
+      }
+      di.sources_content = Some(sources);
+    }
+
+    if matches.opt_present("prefix") {
+      let prefix_replacements = PrefixReplacements::parse(&matches.opt_strs("prefix"));
+      prefix_replacements.replace_all(&mut di.sources);
+    }
+
     if as_json {
       let output = matches.opt_str("o").unwrap();
       let result = convert_debug_info_to_json(&di).to_string();

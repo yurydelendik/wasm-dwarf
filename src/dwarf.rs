@@ -34,6 +34,7 @@ pub struct DebugLoc {
 pub struct DebugLocInfo {
     pub sources: Vec<String>,
     pub locations: Vec<DebugLoc>,
+    pub sources_content: Option<Vec<String>>,
 }
 
 pub fn get_debug_loc(debug_sections: &DebugSections) -> DebugLocInfo {
@@ -112,5 +113,6 @@ pub fn get_debug_loc(debug_sections: &DebugSections) -> DebugLocInfo {
     DebugLocInfo {
         sources,
         locations,
+        sources_content: None,
     }
 }

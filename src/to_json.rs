@@ -41,5 +41,8 @@ pub fn convert_debug_info_to_json(di: &DebugLocInfo) -> Json {
     root.insert("sources".to_string(), di.sources.to_json());
     root.insert("names".to_string(), names.to_json());
     root.insert("mappings".to_string(), mappings.to_json());
+    if let Some(ref sources_content) = di.sources_content {
+        root.insert("sourcesContent".to_string(), sources_content.to_json());
+    }
     Json::Object(root)
 }

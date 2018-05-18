@@ -2,13 +2,11 @@
 
 use std::collections::HashMap;
 
-use wasmparser::{
-    Parser,WasmDecoder,ParserState,ParserInput,SectionCode,
-    ImportSectionEntryType,Operator
-};
+use wasmparser::{ImportSectionEntryType, Operator, Parser, ParserInput, ParserState, SectionCode,
+                 WasmDecoder};
 
 fn is_reloc_debug_section_name(name: &[u8]) -> bool {
-  return name.len() >= 13 && &name[0..13] == b"reloc..debug_" ;
+    return name.len() >= 13 && &name[0..13] == b"reloc..debug_";
 }
 
 fn is_debug_section_name(name: &[u8]) -> bool {
@@ -42,6 +40,7 @@ impl DebugSections {
         let mut func_offsets = Vec::new();
         let mut data_segment_offsets = Vec::new();
         let mut section_index = 0;
+        let mut data_copy = None;
 
         loop {
             let offset = parser.current_position();
@@ -55,80 +54,85 @@ impl DebugSections {
                 ParserState::EndWasm => break,
                 ParserState::Error(err) => panic!("Error: {:?}", err),
                 ParserState::BeginSection {
-                    code: SectionCode::Custom {
-                        ref name,
-                        ..
-                    },
-                    .. 
-                } if is_debug_section_name(name) ||
-                     is_reloc_debug_section_name(name) ||
-                     is_linking_section_name(name) => {
+                    code: SectionCode::Custom { ref name, .. },
+                    ..
+                } if is_debug_section_name(name) || is_reloc_debug_section_name(name)
+                    || is_linking_section_name(name) =>
+                {
                     let mut name_copy = Vec::new();
                     name_copy.extend_from_slice(name);
                     current_section_name = Some(name_copy);
+                    data_copy = Some(Vec::new());
                     input = ParserInput::ReadSectionRawData;
-                },
+                }
                 ParserState::SectionRawData(ref data) => {
-                    let mut data_copy = Vec::new();
-                    data_copy.extend_from_slice(data);
-
-                    let mut name_copy = Vec::new();
-                    name_copy.extend_from_slice(current_section_name.as_ref().unwrap());
-                    tables_index.insert(section_index, name_copy);
-
-                    let section_name = current_section_name.take().unwrap();
-                    if is_debug_section_name(&section_name) {          
-                        tables.insert(
-                            section_name,
-                            data_copy
-                        );
-                    } else if is_reloc_debug_section_name(&section_name) {
-                        reloc_tables.insert(
-                            section_name,
-                            data_copy
-                        );
-                    } else {
-                        assert!(is_linking_section_name(&section_name));
-                        linking = Some(data_copy);
-                    }
-
+                    data_copy.as_mut().unwrap().extend_from_slice(data);
                     input = ParserInput::Default;
-                },
-                ParserState::BeginSection { code: SectionCode::Import, .. } |
-                ParserState::BeginSection { code: SectionCode::Data, .. } |
-                ParserState::BeginSection { code: SectionCode::Code, .. } => {
+                }
+                ParserState::BeginSection {
+                    code: SectionCode::Import,
+                    ..
+                }
+                | ParserState::BeginSection {
+                    code: SectionCode::Data,
+                    ..
+                }
+                | ParserState::BeginSection {
+                    code: SectionCode::Code,
+                    ..
+                } => {
                     input = ParserInput::Default;
-                },
+                }
                 ParserState::BeginFunctionBody { .. } => {
                     if code_content.is_none() {
                         code_content = Some(offset);
                     }
                     input = ParserInput::SkipFunctionBody;
-                },
-                ParserState::ImportSectionEntry { ty: ImportSectionEntryType::Function(..), .. } => {
+                }
+                ParserState::ImportSectionEntry {
+                    ty: ImportSectionEntryType::Function(..),
+                    ..
+                } => {
                     func_offsets.push(0); // include imports?
                     input = ParserInput::Default;
                 }
                 ParserState::BeginSection { .. } => {
                     input = ParserInput::SkipSection;
-                },
+                }
                 ParserState::EndSection => {
                     section_index += 1;
+
+                    if data_copy.is_some() {
+                        let mut name_copy = Vec::new();
+                        name_copy.extend_from_slice(current_section_name.as_ref().unwrap());
+                        tables_index.insert(section_index, name_copy);
+
+                        let section_name = current_section_name.take().unwrap();
+                        let data = data_copy.take().unwrap();
+                        if is_debug_section_name(&section_name) {
+                            tables.insert(section_name, data);
+                        } else if is_reloc_debug_section_name(&section_name) {
+                            reloc_tables.insert(section_name, data);
+                        } else {
+                            assert!(is_linking_section_name(&section_name));
+                            linking = Some(data);
+                        }
+                    }
                     input = ParserInput::Default;
-                },
+                }
                 ParserState::InitExpressionOperator(ref op) => {
-                    if let Operator::I32Const { value, } = op {
+                    if let Operator::I32Const { value } = op {
                         data_segment_offsets.push(*value as u32);
                     } else {
                         panic!("Unexpected init expression operator");
                     }
                     input = ParserInput::Default;
-                },
+                }
                 _ => {
                     input = ParserInput::Default;
-                },
+                }
             }
-        }        
+        }
         DebugSections {
             tables,
             tables_index,

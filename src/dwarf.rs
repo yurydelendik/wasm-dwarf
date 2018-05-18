@@ -4,9 +4,7 @@ use std::collections::HashMap;
 
 use gimli;
 
-use gimli::{
-    DebugAbbrev, DebugInfo, DebugStr, DebugLine, LittleEndian
-};
+use gimli::{DebugAbbrev, DebugInfo, DebugLine, DebugStr, LittleEndian};
 
 trait Reader: gimli::Reader<Offset = usize> {}
 
@@ -49,7 +47,7 @@ pub fn get_debug_loc(debug_sections: &DebugSections) -> DebugLocInfo {
     let ref debug_line = DebugLine::new(&tables[&to_vec(b".debug_line")], LittleEndian);
 
     let mut iter = debug_info.units();
-    while let Some(unit) = iter.next().unwrap_or(None) {        
+    while let Some(unit) = iter.next().unwrap_or(None) {
         let abbrevs = unit.abbreviations(debug_abbrev).unwrap();
         let mut cursor = unit.entries(&abbrevs);
         cursor.next_dfs().expect("???");
@@ -58,9 +56,11 @@ pub fn get_debug_loc(debug_sections: &DebugSections) -> DebugLocInfo {
             Some(gimli::AttributeValue::DebugLineRef(offset)) => offset,
             _ => continue,
         };
-        let comp_dir = root.attr(gimli::DW_AT_comp_dir).unwrap()
+        let comp_dir = root.attr(gimli::DW_AT_comp_dir)
+            .unwrap()
             .and_then(|attr| attr.string_value(debug_str));
-        let comp_name = root.attr(gimli::DW_AT_name).unwrap()
+        let comp_name = root.attr(gimli::DW_AT_name)
+            .unwrap()
             .and_then(|attr| attr.string_value(debug_str));
         let program = debug_line.program(offset, unit.address_size(), comp_dir, comp_name);
         if let Ok(program) = program {

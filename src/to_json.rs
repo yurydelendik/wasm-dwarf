@@ -1,9 +1,9 @@
 // Converts DebugLocInfo to JS source maps.
 
-use std::collections::BTreeMap;
-use std::str;
 use dwarf::DebugLocInfo;
 use rustc_serialize::json::{Json, ToJson};
+use std::collections::BTreeMap;
+use std::str;
 use vlq::encode;
 
 pub fn convert_debug_info_to_json(di: &DebugLocInfo) -> Json {

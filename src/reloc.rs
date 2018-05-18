@@ -12,8 +12,8 @@ fn to_vec(b: &[u8]) -> Vec<u8> {
 }
 
 enum SymbolKind {
-    Section (u32),
-    Data (u32, u32),
+    Section(u32),
+    Data(u32, u32),
 }
 
 pub fn reloc(debug_sections: &mut DebugSections) {
@@ -27,7 +27,9 @@ pub fn reloc(debug_sections: &mut DebugSections) {
         while !reader.eof() {
             let table_code = reader.read_var_u32().unwrap();
             let table = reader.read_string().unwrap();
-            if table_code == 0x8 /* WASM_SYMBOL_TABLE */ {
+            if table_code == 0x8
+            /* WASM_SYMBOL_TABLE */
+            {
                 let mut table_reader = BinaryReader::new(table);
                 let table_len = table_reader.read_var_u32().unwrap();
                 for index in 0..table_len {
@@ -105,15 +107,15 @@ pub fn reloc(debug_sections: &mut DebugSections) {
                     debug_sections.func_offsets[*func_index as usize] as u32 // function offset
                 }
                 9 => 0, // section offset,
-                _ => panic!("unexpected reloc type")
+                _ => panic!("unexpected reloc type"),
             };
 
             let target_addend = reader.read_var_u32().unwrap();
 
-            let _old_offset = (table[fixup_offset + 0] as u32) |
-              ((table[fixup_offset + 1] as u32) << 8) |
-              ((table[fixup_offset + 2] as u32) << 16) |
-              ((table[fixup_offset + 3] as u32) << 24);
+            let _old_offset = (table[fixup_offset + 0] as u32)
+                | ((table[fixup_offset + 1] as u32) << 8)
+                | ((table[fixup_offset + 2] as u32) << 16)
+                | ((table[fixup_offset + 3] as u32) << 24);
 
             let offset = target_offset + target_addend;
             table[fixup_offset + 0] = (offset & 0xFF) as u8;

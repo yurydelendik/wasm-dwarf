@@ -10,9 +10,12 @@ pub fn convert_debug_info_to_json(di: &DebugLocInfo) -> Json {
     let mut buffer = Vec::new();
     let mut last_address = 0;
     let mut last_source_id = 0;
-    let mut last_line = 0;
-    let mut last_column = 0;
+    let mut last_line = 1;
+    let mut last_column = 1;
     for loc in di.locations.iter() {
+        if loc.line == 0 || loc.column == 0 {
+            continue;
+        }
         let address_delta = loc.address as i64 - last_address;
         encode(address_delta, &mut buffer).unwrap();
         let source_id_delta = loc.source_id as i64 - last_source_id;

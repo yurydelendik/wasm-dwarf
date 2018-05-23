@@ -6,7 +6,7 @@ use dwarf::get_debug_loc;
 use getopts::Options;
 use reloc::reloc;
 use to_json::convert_debug_info_to_json;
-use wasm_read::DebugSections;
+use wasm_read::{add_source_mapping_url_section, remove_debug_sections, DebugSections};
 
 extern crate getopts;
 extern crate gimli;
@@ -74,6 +74,14 @@ fn main() {
         "OLD_PREFIX[=NEW_PREFIX]",
     );
     opts.optflag("s", "sources", "read and embed source files");
+    opts.optopt("w", "", "set output wasm file", "NAME");
+    opts.optflag("x", "strip", "removes debug and linking sections");
+    opts.optopt(
+        "m",
+        "source-map",
+        "specifies sourceMappingURL section contest",
+        "URL",
+    );
     opts.optflag("h", "help", "print this help menu");
 
     let args: Vec<_> = env::args().collect();
@@ -128,7 +136,7 @@ fn main() {
         if output == "-" {
             println!("{}", result);
         } else {
-            let mut f_out = File::create(output).expect("file can be created");
+            let mut f_out = File::create(output).expect("file cannot be created");
             f_out.write(result.as_bytes()).expect("data written");
         }
     } else {
@@ -141,6 +149,27 @@ fn main() {
                 loc.address, loc.line, loc.column, loc.source_id
             );
         }
+    }
+
+    if matches.opt_present("w") {
+        let wasm_output = matches.opt_str("w").unwrap();
+        let mut modified_wasm = None;
+        if matches.opt_present("x") {
+            modified_wasm = Some(Vec::new());
+            remove_debug_sections(&data, modified_wasm.as_mut().unwrap());
+        }
+        if matches.opt_present("m") {
+            if modified_wasm.is_none() {
+                modified_wasm = Some(Vec::new());
+                modified_wasm.as_mut().unwrap().extend_from_slice(&data);
+            }
+            let url = matches.opt_str("m").unwrap();
+            add_source_mapping_url_section(&url, modified_wasm.as_mut().unwrap());
+        }
+        let mut f_out = File::create(wasm_output).expect("file cannot be created");
+        f_out
+            .write(&modified_wasm.unwrap_or(data))
+            .expect("wasm data written");
     }
 }
 

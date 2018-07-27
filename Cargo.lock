@@ -48,7 +48,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "wasm-dwarf"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "getopts 0.2.17 (registry+https://github.com/rust-lang/crates.io-index)",
  "gimli 0.15.0 (registry+https://github.com/rust-lang/crates.io-index)",

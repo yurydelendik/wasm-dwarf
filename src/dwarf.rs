@@ -63,6 +63,7 @@ pub fn get_debug_loc(debug_sections: &DebugSections) -> DebugLocInfo {
             .unwrap()
             .and_then(|attr| attr.string_value(debug_str));
         let program = debug_line.program(offset, unit.address_size(), comp_dir, comp_name);
+        let mut block_start_loc = locations.len();
         if let Ok(program) = program {
             let mut rows = program.rows();
             while let Some((header, row)) = rows.next_row().unwrap() {
@@ -101,6 +102,16 @@ pub fn get_debug_loc(debug_sections: &DebugSections) -> DebugLocInfo {
                     column: column as u32,
                 };
                 locations.push(loc);
+                if row.end_sequence() {
+                    // Heuristic to remove dead functions.
+                    let block_end_loc = locations.len() - 1;
+                    let fn_size = locations[block_end_loc].address - locations[block_start_loc].address + 1;
+                    let fn_size_field_len = ((fn_size + 1).next_power_of_two().trailing_zeros() + 6) / 7;
+                    if locations[block_start_loc].address <= debug_sections.code_content as u64 + fn_size_field_len as u64 {
+                        locations.drain(block_start_loc..);
+                    }
+                    block_start_loc = locations.len();
+                }
             }
         }
 
